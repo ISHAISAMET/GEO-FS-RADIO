@@ -1,0 +1,12 @@
+{
+  "name": "geofs-radio-server",
+  "version": "1.0.0",
+  "description": "Signaling server for GeoFS Radio Addon",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
