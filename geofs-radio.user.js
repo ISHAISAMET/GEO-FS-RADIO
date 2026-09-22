@@ -7,8 +7,8 @@
 // @match        https://www.geo-fs.com/*
 // @match        https://geo-fs.com/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/YOUR_USERNAME/geofs-radio/main/geofs-radio.user.js
-// @downloadURL  https://raw.githubusercontent.com/YOUR_USERNAME/geofs-radio/main/geofs-radio.user.js
+// @updateURL    https://raw.githubusercontent.com/ISHAISAMET/GEO-FS-RADIO/main/geofs-radio.user.js
+// @downloadURL  https://raw.githubusercontent.com/ISHAISAMET/GEO-FS-RADIO/main/geofs-radio.user.js
 // ==/UserScript==
 
 (function () {
