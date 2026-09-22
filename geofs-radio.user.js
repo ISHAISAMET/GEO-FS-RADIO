@@ -14,11 +14,7 @@
 (function () {
   'use strict';
 
-  // ============================================================
-  // הגדרות בסיס - כאן מגדירים את כתובת שרת ה-signaling
-  // אחרי שתעלה את השרת ל-Render (ראה README), תחליף את השורה הבאה
-  // ============================================================
-  const SERVER_URL = 'wss://YOUR-SERVER-NAME.onrender.com';
+  const SERVER_URL = 'wss://geo-fs-radio-1.onrender.com';
 
   const BANDS = [
     { min: 108.00, max: 135.90, step: 0.05 },
