@@ -48,7 +48,8 @@
   }
 
   const state = loadSettings();
-  let listeningForBind = null; // id של מכשיר שממתין ללחיצת מקש
+  let listeningForBind = null; // id של מכשיר שממתין ללחיצת מקש מקלדת
+  let listeningForJoystickBind = null; // id של מכשיר שממתין ללחיצת כפתור בסטיק
   let micStream = null;
   const peerConnectionsByDevice = { 1: {}, 2: {}, 3: {} }; // deviceId -> { peerId: RTCPeerConnection }
   const micClonesByDevice = {};
@@ -95,6 +96,18 @@
     return `${radio.frequency.toFixed(2)}_${radio.mode}`;
   }
 
+  function setFrequencyDirect(radio, value) {
+    const f = parseFloat(value);
+    if (isNaN(f) || !clampFrequency(f)) {
+      render(); // מחזיר את התצוגה לערך התקין הקודם
+      return;
+    }
+    radio.frequency = +f.toFixed(2);
+    saveSettings();
+    render();
+    rejoinChannel(radio);
+  }
+
   // ============================================================
   // ממשק גרפי
   // ============================================================
@@ -113,6 +126,7 @@
       .geofs-radio-screen {
         background: #001a00; padding: 6px; text-align: center;
         font-size: 18px; border-radius: 4px; margin-bottom: 6px; letter-spacing: 1px;
+        cursor: pointer;
       }
       .geofs-radio-row { display: flex; gap: 4px; margin-bottom: 4px; }
       .geofs-radio-row button {
@@ -163,15 +177,39 @@
         <div class="geofs-radio-row">
           <button data-action="bindKey" class="geofs-bind-btn">מקש: ${state.keyBindings[radio.id] || '—'}</button>
         </div>
+        <div class="geofs-radio-row">
+          <button data-action="bindJoystick" class="geofs-bind-btn">סטיק: ${state.joystickBindings[radio.id] !== undefined ? ('כפתור ' + state.joystickBindings[radio.id]) : '—'}</button>
+        </div>
         <div class="geofs-ptt-dot" data-dot></div>
       `;
-      unit.querySelector('[data-action="down"]').onclick = () => stepFrequency(radio, -1);
-      unit.querySelector('[data-action="up"]').onclick = () => stepFrequency(radio, 1);
+      startHoldRepeat(unit.querySelector('[data-action="down"]'), () => stepFrequency(radio, -1));
+      startHoldRepeat(unit.querySelector('[data-action="up"]'), () => stepFrequency(radio, 1));
+      unit.querySelector('.geofs-radio-screen').onclick = () => {
+        const input = prompt('הקלד תדר (לדוגמה 118.10):', radio.frequency.toFixed(2));
+        if (input === null) return;
+        const val = parseFloat(input.replace(',', '.'));
+        if (!isNaN(val) && clampFrequency(val)) {
+          radio.frequency = +val.toFixed(2);
+          saveSettings();
+          render();
+          rejoinChannel(radio);
+        } else {
+          alert('תדר לא חוקי. חייב להיות בטווח 108.00-135.90 או 1100.00-3900.90');
+        }
+      };
+      unit.addEventListener('wheel', e => {
+        e.preventDefault();
+        stepFrequency(radio, e.deltaY < 0 ? 1 : -1);
+      }, { passive: false });
       unit.querySelector('[data-action="mode"]').onclick = () => cycleMode(radio);
       unit.querySelector('[data-action="power"]').onclick = () => togglePower(radio);
       unit.querySelector('[data-action="bindKey"]').onclick = () => {
         listeningForBind = radio.id;
         unit.querySelector('[data-action="bindKey"]').textContent = 'לחץ מקש...';
+      };
+      unit.querySelector('[data-action="bindJoystick"]').onclick = () => {
+        listeningForJoystickBind = radio.id;
+        unit.querySelector('[data-action="bindJoystick"]').textContent = 'לחץ כפתור בסטיק...';
       };
       panel.appendChild(unit);
     });
@@ -185,6 +223,25 @@
     if (idx === -1) return;
     const dot = units[idx]?.querySelector('[data-dot]');
     if (dot) dot.classList.toggle('active', active);
+  }
+
+  // לחיצה ארוכה על כפתור = חזרה מהירה, כדי לא ללחוץ מיליון פעם
+  function startHoldRepeat(button, action) {
+    let intervalId = null;
+    let timeoutId = null;
+    const stop = () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+      intervalId = null;
+    };
+    button.addEventListener('mousedown', () => {
+      action(); // לחיצה ראשונה מיידית
+      timeoutId = setTimeout(() => {
+        intervalId = setInterval(action, 60); // חזרה מהירה אחרי חצי שנייה
+      }, 400);
+    });
+    button.addEventListener('mouseup', stop);
+    button.addEventListener('mouseleave', stop);
   }
 
   // ============================================================
@@ -214,10 +271,21 @@
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = pads[0];
     if (gp) {
-      Object.entries(state.joystickBindings).forEach(([deviceId, buttonIndex]) => {
-        const pressed = !!gp.buttons[buttonIndex]?.pressed;
-        setPTT(+deviceId, pressed);
-      });
+      if (listeningForJoystickBind) {
+        // מחפשים אם נלחץ כרגע כפתור כלשהו - הראשון שנמצא נקבע
+        const pressedIndex = gp.buttons.findIndex(b => b.pressed);
+        if (pressedIndex !== -1) {
+          state.joystickBindings[listeningForJoystickBind] = pressedIndex;
+          saveSettings();
+          listeningForJoystickBind = null;
+          render();
+        }
+      } else {
+        Object.entries(state.joystickBindings).forEach(([deviceId, buttonIndex]) => {
+          const pressed = !!gp.buttons[buttonIndex]?.pressed;
+          setPTT(+deviceId, pressed);
+        });
+      }
     }
     requestAnimationFrame(pollGamepad);
   }
