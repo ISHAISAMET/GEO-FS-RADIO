@@ -9,7 +9,7 @@ Install the [tampermonkey](https://chromewebstore.google.com/detail/tampermonkey
  extension for your browser (Chrome, Firefox, Edge, etc.)
 
  - 2 Install the Script:
-[Click here](https://github.com/ISHAISAMET/GEO-FS-RADIO/raw/refs/heads/main/geofs-radio.user.js)Go to the .user.js file here on GitHub, and click the Raw button at the top right of the code view box.
+[Click here](https://github.com/ISHAISAMET/GEO-FS-RADIO/raw/refs/heads/main/geofs-radio.user.js) or go to the .user.js file here on GitHub, and click the Raw button at the top right of the code view box.
 
  - 3 Confirm:
 Tampermonkey will automatically detect the file and open an installation window – click Install, and that's it, the extension is active!
