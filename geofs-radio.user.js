@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GeoFS Radio Addon
 // @namespace    https://github.com/ISHAISAMET/GEO-FS-RADIO
-// @version      1.0.1
-// @description  שלושה מכשירי רדיו לדיבור קולי בין שחקנים ב-GeoFS
+// @version      2.0.0
+// @description  Voice radio addon for GeoFS - talk to other players who have the same addon
 // @author       ISHAISAMET
 // @match        https://www.geo-fs.com/*
 // @match        https://geo-fs.com/*
@@ -15,31 +15,35 @@
   'use strict';
 
   // ============================================================
-  // הגדרות בסיס - כאן מגדירים את כתובת שרת ה-signaling
-  // אחרי שתעלה את השרת ל-Render (ראה README), תחליף את השורה הבאה
+  // Basic config - the signaling server address.
   // ============================================================
   const SERVER_URL = 'wss://geo-fs-radio-1.onrender.com';
 
+  // Allowed frequency ranges. Anything outside these is rejected.
   const BANDS = [
     { min: 108.00, max: 135.90, step: 0.05 },
     { min: 1100.00, max: 3900.90, step: 0.10 }
   ];
 
   const STORAGE_KEY = 'geofsRadioSettings';
+  const DEFAULT_FREQUENCY = 118.00;
 
   function loadSettings() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
     } catch (e) {}
+    // Two radios by default. Both can still be tuned to either band
+    // (108.00-135.90 or 1100.00-3900.90) - there's just no dedicated
+    // third unit for now.
     return {
       radios: [
-        { id: 1, frequency: 118.00, mode: 1, power: false },
-        { id: 2, frequency: 121.50, mode: 1, power: false },
-        { id: 3, frequency: 1100.00, mode: 1, power: false }
+        { id: 1, frequency: DEFAULT_FREQUENCY, mode: 1, power: false },
+        { id: 2, frequency: DEFAULT_FREQUENCY, mode: 1, power: false }
       ],
       keyBindings: {},
-      joystickBindings: {}
+      joystickBindings: {},
+      panelVisible: true
     };
   }
 
@@ -48,16 +52,20 @@
   }
 
   const state = loadSettings();
-  let listeningForBind = null; // id של מכשיר שממתין ללחיצת מקש מקלדת
-  let listeningForJoystickBind = null; // id של מכשיר שממתין ללחיצת כפתור בסטיק
+  let listeningForBind = null;          // device id waiting for a keyboard key press
+  let listeningForJoystickBind = null;  // device id waiting for a joystick button press
   let micStream = null;
-  const peerConnectionsByDevice = { 1: {}, 2: {}, 3: {} }; // deviceId -> { peerId: RTCPeerConnection }
+
+  // deviceId -> { peerId: RTCPeerConnection }, built dynamically from state.radios
+  const peerConnectionsByDevice = {};
+  state.radios.forEach(r => { peerConnectionsByDevice[r.id] = {}; });
+
   const micClonesByDevice = {};
   let ws = null;
   let myId = null;
 
   // ============================================================
-  // עזרי תדר
+  // Frequency helpers
   // ============================================================
   function clampFrequency(f) {
     for (const b of BANDS) {
@@ -99,7 +107,7 @@
   function setFrequencyDirect(radio, value) {
     const f = parseFloat(value);
     if (isNaN(f) || !clampFrequency(f)) {
-      render(); // מחזיר את התצוגה לערך התקין הקודם
+      render(); // revert display to the last valid value
       return;
     }
     radio.frequency = +f.toFixed(2);
@@ -109,17 +117,18 @@
   }
 
   // ============================================================
-  // ממשק גרפי
+  // Graphic interface
   // ============================================================
   function injectStyles() {
     const style = document.createElement('style');
     style.textContent = `
       #geofs-radio-panel {
-        position: fixed; top: 50%; left: 10px; transform: translateY(-50%);
+        position: fixed; top: 50%; left: 34px; transform: translateY(-50%);
         z-index: 2147483647;
         display: flex; flex-direction: column; gap: 8px; font-family: monospace;
       }
       .geofs-radio-unit {
+        position: relative;
         width: 150px; background: #2b2b2b; border: 2px solid #555;
         border-radius: 8px; padding: 8px; color: #0f0; user-select: none;
       }
@@ -141,16 +150,61 @@
         margin: 4px auto 0; transition: background 0.1s;
       }
       .geofs-ptt-dot.active { background: red; box-shadow: 0 0 6px red; }
-      .geofs-bind-btn { font-size: 10px !important; }
+
+      .geofs-gear-btn {
+        position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+        background: #444; color: #0f0; border: 1px solid #666; border-radius: 4px;
+        cursor: pointer; font-size: 12px; line-height: 18px; padding: 0;
+      }
+      .geofs-gear-btn:hover { background: #555; }
+      .geofs-settings-menu {
+        display: none;
+        position: absolute; top: 26px; right: 4px; z-index: 10;
+        background: #1c1c1c; border: 1px solid #666; border-radius: 6px;
+        padding: 6px; flex-direction: column; gap: 4px; width: 150px;
+      }
+      .geofs-settings-menu.open { display: flex; }
+      .geofs-settings-menu button {
+        background: #444; color: #0f0; border: 1px solid #666; border-radius: 4px;
+        cursor: pointer; font-family: monospace; font-size: 11px; padding: 4px;
+      }
+
+      #geofs-radio-toggle-tab {
+        position: fixed; top: 50%; left: 0; transform: translateY(-50%);
+        z-index: 2147483647;
+        width: 24px; height: 60px; background: #2b2b2b; border: 2px solid #555;
+        border-left: none; border-radius: 0 6px 6px 0; color: #0f0;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; font-size: 14px; writing-mode: vertical-rl;
+        font-family: monospace;
+      }
+      #geofs-radio-toggle-tab:hover { background: #3a3a3a; }
     `;
     document.head.appendChild(style);
   }
 
   function injectPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'geofs-radio-panel';
-    document.body.appendChild(panel);
+    if (!document.getElementById('geofs-radio-panel')) {
+      const panel = document.createElement('div');
+      panel.id = 'geofs-radio-panel';
+      panel.style.display = state.panelVisible ? 'flex' : 'none';
+      document.body.appendChild(panel);
+    }
     render();
+  }
+
+  function injectToggleTab() {
+    if (document.getElementById('geofs-radio-toggle-tab')) return;
+    const tab = document.createElement('div');
+    tab.id = 'geofs-radio-toggle-tab';
+    tab.textContent = 'RADIO';
+    tab.onclick = () => {
+      state.panelVisible = !state.panelVisible;
+      saveSettings();
+      const panel = document.getElementById('geofs-radio-panel');
+      if (panel) panel.style.display = state.panelVisible ? 'flex' : 'none';
+    };
+    document.body.appendChild(tab);
   }
 
   function render() {
@@ -161,56 +215,58 @@
       const unit = document.createElement('div');
       unit.className = 'geofs-radio-unit';
       unit.innerHTML = `
-        <div class="geofs-radio-screen">${radio.frequency.toFixed(2)}</div>
+        <button class="geofs-gear-btn" data-action="settingsToggle" title="Settings">&#9881;</button>
+        <div class="geofs-settings-menu" data-menu>
+          <button data-action="bindKey">Key: ${state.keyBindings[radio.id] || '-'}</button>
+          <button data-action="bindJoystick">Joystick: ${state.joystickBindings[radio.id] !== undefined ? ('Button ' + state.joystickBindings[radio.id]) : '-'}</button>
+        </div>
+        <div class="geofs-radio-screen" data-action="freqClick">${radio.frequency.toFixed(2)}</div>
         <div class="geofs-radio-row">
-          <button data-action="down">▼</button>
-          <button data-action="up">▲</button>
+          <button data-action="down">&#9660;</button>
+          <button data-action="up">&#9650;</button>
         </div>
         <div class="geofs-radio-row">
-          <button data-action="mode">מצב ${radio.mode}</button>
+          <button data-action="mode">Mode ${radio.mode}</button>
         </div>
         <div class="geofs-radio-row">
           <button data-action="power" class="geofs-power-btn ${radio.power ? 'on' : 'off'}">
-            ${radio.power ? 'פועל' : 'כבוי'}
+            ${radio.power ? 'ON' : 'OFF'}
           </button>
-        </div>
-        <div class="geofs-radio-row">
-          <button data-action="bindKey" class="geofs-bind-btn">מקש: ${state.keyBindings[radio.id] || '—'}</button>
-        </div>
-        <div class="geofs-radio-row">
-          <button data-action="bindJoystick" class="geofs-bind-btn">סטיק: ${state.joystickBindings[radio.id] !== undefined ? ('כפתור ' + state.joystickBindings[radio.id]) : '—'}</button>
         </div>
         <div class="geofs-ptt-dot" data-dot></div>
       `;
-      startHoldRepeat(unit.querySelector('[data-action="down"]'), () => stepFrequency(radio, -1));
-      startHoldRepeat(unit.querySelector('[data-action="up"]'), () => stepFrequency(radio, 1));
-      unit.querySelector('.geofs-radio-screen').onclick = () => {
-        const input = prompt('הקלד תדר (לדוגמה 118.10):', radio.frequency.toFixed(2));
+
+      const menu = unit.querySelector('[data-menu]');
+
+      unit.querySelector('[data-action="settingsToggle"]').onclick = () => {
+        menu.classList.toggle('open');
+      };
+
+      unit.querySelector('[data-action="freqClick"]').onclick = () => {
+        const input = prompt('Enter frequency (e.g. 118.10):', radio.frequency.toFixed(2));
         if (input === null) return;
         const val = parseFloat(input.replace(',', '.'));
         if (!isNaN(val) && clampFrequency(val)) {
-          radio.frequency = +val.toFixed(2);
-          saveSettings();
-          render();
-          rejoinChannel(radio);
+          setFrequencyDirect(radio, val);
         } else {
-          alert('תדר לא חוקי. חייב להיות בטווח 108.00-135.90 או 1100.00-3900.90');
+          alert('Invalid frequency. Must be within 108.00-135.90 or 1100.00-3900.90');
         }
       };
-      unit.addEventListener('wheel', e => {
-        e.preventDefault();
-        stepFrequency(radio, e.deltaY < 0 ? 1 : -1);
-      }, { passive: false });
+
+      unit.querySelector('[data-action="down"]').onclick = () => stepFrequency(radio, -1);
+      unit.querySelector('[data-action="up"]').onclick = () => stepFrequency(radio, 1);
       unit.querySelector('[data-action="mode"]').onclick = () => cycleMode(radio);
       unit.querySelector('[data-action="power"]').onclick = () => togglePower(radio);
+
       unit.querySelector('[data-action="bindKey"]').onclick = () => {
         listeningForBind = radio.id;
-        unit.querySelector('[data-action="bindKey"]').textContent = 'לחץ מקש...';
+        unit.querySelector('[data-action="bindKey"]').textContent = 'Press a key...';
       };
       unit.querySelector('[data-action="bindJoystick"]').onclick = () => {
         listeningForJoystickBind = radio.id;
-        unit.querySelector('[data-action="bindJoystick"]').textContent = 'לחץ כפתור בסטיק...';
+        unit.querySelector('[data-action="bindJoystick"]').textContent = 'Press a joystick button...';
       };
+
       panel.appendChild(unit);
     });
   }
@@ -225,27 +281,8 @@
     if (dot) dot.classList.toggle('active', active);
   }
 
-  // לחיצה ארוכה על כפתור = חזרה מהירה, כדי לא ללחוץ מיליון פעם
-  function startHoldRepeat(button, action) {
-    let intervalId = null;
-    let timeoutId = null;
-    const stop = () => {
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
-      intervalId = null;
-    };
-    button.addEventListener('mousedown', () => {
-      action(); // לחיצה ראשונה מיידית
-      timeoutId = setTimeout(() => {
-        intervalId = setInterval(action, 60); // חזרה מהירה אחרי חצי שנייה
-      }, 400);
-    });
-    button.addEventListener('mouseup', stop);
-    button.addEventListener('mouseleave', stop);
-  }
-
   // ============================================================
-  // מקלדת
+  // Keyboard
   // ============================================================
   window.addEventListener('keydown', e => {
     if (listeningForBind) {
@@ -265,14 +302,13 @@
   });
 
   // ============================================================
-  // ג'ויסטיק / סטיק (Gamepad API) - פולינג
+  // Joystick / HOTAS (Gamepad API) - polled every animation frame
   // ============================================================
   function pollGamepad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = pads[0];
     if (gp) {
       if (listeningForJoystickBind) {
-        // מחפשים אם נלחץ כרגע כפתור כלשהו - הראשון שנמצא נקבע
         const pressedIndex = gp.buttons.findIndex(b => b.pressed);
         if (pressedIndex !== -1) {
           state.joystickBindings[listeningForJoystickBind] = pressedIndex;
@@ -291,43 +327,43 @@
   }
 
   // ============================================================
-  // PTT בפועל - מדליק/מכבה שידור למכשיר ספציפי
+  // PTT - enables/disables transmission for a specific device
   // ============================================================
   function setPTT(deviceId, pressed) {
     const radio = state.radios.find(r => r.id === deviceId);
-    if (!radio || !radio.power) return; // מכשיר כבוי - אין דיבור
+    if (!radio || !radio.power) return; // device is off - no talking
     const clone = micClonesByDevice[deviceId];
     if (clone) clone.enabled = pressed;
     setPttDot(deviceId, pressed);
   }
 
   // ============================================================
-  // מיקרופון
+  // Microphone
   // ============================================================
   async function initMic() {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      console.error('GeoFS Radio: לא ניתן לגשת למיקרופון', e);
+      console.error('GeoFS Radio: could not access the microphone', e);
     }
   }
 
   function getMicCloneForDevice(deviceId) {
     if (!micClonesByDevice[deviceId] && micStream) {
       const track = micStream.getAudioTracks()[0].clone();
-      track.enabled = false; // מושתק עד ל-PTT
+      track.enabled = false; // muted until PTT is pressed
       micClonesByDevice[deviceId] = track;
     }
     return micClonesByDevice[deviceId];
   }
 
   // ============================================================
-  // חיבור לשרת ה-signaling + WebRTC
+  // Signaling server connection + WebRTC
   // ============================================================
   function connectSocket() {
     ws = new WebSocket(SERVER_URL);
     ws.onopen = () => {
-      // מצטרפים לכל ערוץ שהמכשיר כבר דלוק עליו
+      // join every channel whose device is already powered on
       state.radios.forEach(r => { if (r.power) rejoinChannel(r); });
     };
     ws.onmessage = evt => {
@@ -335,7 +371,7 @@
       handleServerMessage(msg);
     };
     ws.onclose = () => {
-      setTimeout(connectSocket, 3000); // ניסיון חיבור מחדש
+      setTimeout(connectSocket, 3000); // try to reconnect
     };
   }
 
@@ -344,11 +380,11 @@
       myId = msg.id;
     }
     if (msg.type === 'peers') {
-      // אני החדש בערוץ - אני יוזם offer לכל מי שכבר שם
+      // we're new in the channel - we initiate an offer to everyone already there
       msg.peers.forEach(peerId => createOffer(msg.deviceId, peerId));
     }
     if (msg.type === 'peer-left') {
-      // מחפשים את ה-peer בכל מכשירי המקומיים (לא יודעים מראש איזה מכשיר שלנו החזיק אותו)
+      // search across all local devices for this peer (we don't know in advance which one held it)
       Object.keys(peerConnectionsByDevice).forEach(devId => {
         const pc = peerConnectionsByDevice[devId][msg.id];
         if (pc) { pc.close(); delete peerConnectionsByDevice[devId][msg.id]; }
@@ -366,7 +402,7 @@
   function rejoinChannel(radio) {
     if (!radio.power) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    // עוזבים ערוץ קודם (אם קיים) לפני הצטרפות לחדש
+    // leave the previous channel (if any) before joining the new one
     Object.keys(peerConnectionsByDevice[radio.id]).forEach(peerId => {
       peerConnectionsByDevice[radio.id][peerId].close();
       delete peerConnectionsByDevice[radio.id][peerId];
@@ -423,18 +459,17 @@
   }
 
   // ============================================================
-  // "שומר" - בודק כל 2 שניות שהרדיו עדיין קיים בדף, ואם GeoFS מחק
-  // אותו בזמן שהוא בונה את הממשק שלו, יוצר אותו מחדש
+  // Watchdog - checks every 2 seconds that the panel still exists.
+  // If GeoFS wipes it while rebuilding its own UI, recreate it.
   // ============================================================
   function watchdog() {
-    if (!document.getElementById('geofs-radio-panel')) {
-      injectPanel();
-    }
+    if (!document.getElementById('geofs-radio-panel')) injectPanel();
+    if (!document.getElementById('geofs-radio-toggle-tab')) injectToggleTab();
     setTimeout(watchdog, 2000);
   }
 
   // ============================================================
-  // אתחול
+  // Init
   // ============================================================
   let didInit = false;
   async function init() {
@@ -442,13 +477,15 @@
     didInit = true;
     injectStyles();
     injectPanel();
+    injectToggleTab();
     watchdog();
     await initMic();
     connectSocket();
     requestAnimationFrame(pollGamepad);
   }
 
-  // מריצים גם מיד אם הדף כבר נטען, וגם בעת אירוע load - כדי לא לפספס
+  // Run both immediately (if the page is already loaded) and on the
+  // load event, so we never miss the right moment.
   if (document.readyState === 'complete') {
     setTimeout(init, 500);
   } else {
