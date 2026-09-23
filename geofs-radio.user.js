@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         GeoFS Radio Addon
-// @namespace    https://github.com/YOUR_USERNAME/geofs-radio
-// @version      1.0.0
+// @namespace    https://github.com/ISHAISAMET/GEO-FS-RADIO
+// @version      1.0.1
 // @description  שלושה מכשירי רדיו לדיבור קולי בין שחקנים ב-GeoFS
-// @author       YOUR_NAME
+// @author       ISHAISAMET
 // @match        https://www.geo-fs.com/*
 // @match        https://geo-fs.com/*
 // @grant        none
@@ -14,6 +14,10 @@
 (function () {
   'use strict';
 
+  // ============================================================
+  // הגדרות בסיס - כאן מגדירים את כתובת שרת ה-signaling
+  // אחרי שתעלה את השרת ל-Render (ראה README), תחליף את השורה הבאה
+  // ============================================================
   const SERVER_URL = 'wss://geo-fs-radio-1.onrender.com';
 
   const BANDS = [
@@ -350,15 +354,35 @@
   }
 
   // ============================================================
+  // "שומר" - בודק כל 2 שניות שהרדיו עדיין קיים בדף, ואם GeoFS מחק
+  // אותו בזמן שהוא בונה את הממשק שלו, יוצר אותו מחדש
+  // ============================================================
+  function watchdog() {
+    if (!document.getElementById('geofs-radio-panel')) {
+      injectPanel();
+    }
+    setTimeout(watchdog, 2000);
+  }
+
+  // ============================================================
   // אתחול
   // ============================================================
+  let didInit = false;
   async function init() {
+    if (didInit) return;
+    didInit = true;
     injectStyles();
     injectPanel();
+    watchdog();
     await initMic();
     connectSocket();
     requestAnimationFrame(pollGamepad);
   }
 
-  window.addEventListener('load', () => setTimeout(init, 2000));
+  // מריצים גם מיד אם הדף כבר נטען, וגם בעת אירוע load - כדי לא לפספס
+  if (document.readyState === 'complete') {
+    setTimeout(init, 500);
+  } else {
+    window.addEventListener('load', () => setTimeout(init, 500));
+  }
 })();
