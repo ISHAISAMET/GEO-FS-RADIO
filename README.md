@@ -1,4 +1,4 @@
-# GEO-FS RADIO
+# <img width="100" height="100" alt="logo" src="https://raw.githubusercontent.com/kolos26/GEOFS-LiverySelector/main/liveryselector-logo-small.svg" />GEO-FS RADIO
 Welcome to the GEO-FS Radio Extension! In theory, the simulator communication issue could have been solved through simpler means like a phone (and no, don't tell me you used the chat while in a formation flight at astronomical speeds just to send a message... by the time you finish typing, there won't be a formation left 💥), but that option is highly limited, unrealistic, and doesn't contribute to the community experience. With this extension, you can set a frequency, a push-to-talk button, and many other things. So, ready? Let's get started!
 
 ## 🔧 Extension Installation Steps:
@@ -6,8 +6,10 @@ Welcome to the GEO-FS Radio Extension! In theory, the simulator communication is
 
  - 1 Install a Script Manager:
 Install the Tampermonkey extension for your browser (Chrome, Firefox, Edge, etc.)
+
  - 2 Install the Script:
 Go to the .user.js file here on GitHub, and click the Raw button at the top right of the code view box.
+
  - 3 Confirm:
 Tampermonkey will automatically detect the file and open an installation window – click Install, and that's it, the extension is active!
 
