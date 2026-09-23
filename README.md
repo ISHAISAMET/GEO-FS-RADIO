@@ -1,4 +1,4 @@
-# <img width="100" height="100" alt="logo" src="[https://github.com/ISHAISAMET/GEO-FS-RADIO/blob/main/LOGO.png]" />GEO-FS RADIO
+# <img width="100" height="100" alt="logo" src="[https://cdn.jsdelivr.net/gh/ISHAISAMET/GEO-FS-RADIO@main/LOGO.png]" />GEO-FS RADIO
 Welcome to the GEO-FS Radio Extension! In theory, the simulator communication issue could have been solved through simpler means like a phone (and no, don't tell me you used the chat while in a formation flight at astronomical speeds just to send a message... by the time you finish typing, there won't be a formation left 💥), but that option is highly limited, unrealistic, and doesn't contribute to the community experience. With this extension, you can set a frequency, a push-to-talk button, and many other things. So, ready? Let's get started!
 
 ## 🔧 Extension Installation Steps:
