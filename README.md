@@ -4,11 +4,11 @@ Welcome to the GEO-FS Radio Extension! In theory, the simulator communication is
 ## 🔧 Extension Installation Steps:
 (If you already have Tampermonkey, skip to step 2)
 
- 1 Install a Script Manager:
+ - 1 Install a Script Manager:
 Install the Tampermonkey extension for your browser (Chrome, Firefox, Edge, etc.)
- 2 Install the Script:
+ - 2 Install the Script:
 Go to the .user.js file here on GitHub, and click the Raw button at the top right of the code view box.
- 3 Confirm:
+ - 3 Confirm:
 Tampermonkey will automatically detect the file and open an installation window – click Install, and that's it, the extension is active!
 
 ## 📻 How to Use?
