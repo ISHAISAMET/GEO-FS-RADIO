@@ -102,8 +102,9 @@
     const style = document.createElement('style');
     style.textContent = `
       #geofs-radio-panel {
-        position: fixed; bottom: 10px; left: 10px; z-index: 999999;
-        display: flex; gap: 8px; font-family: monospace;
+        position: fixed; top: 50%; left: 10px; transform: translateY(-50%);
+        z-index: 2147483647;
+        display: flex; flex-direction: column; gap: 8px; font-family: monospace;
       }
       .geofs-radio-unit {
         width: 150px; background: #2b2b2b; border: 2px solid #555;
