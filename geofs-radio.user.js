@@ -5,6 +5,7 @@
 // @description  Voice radio addon for GeoFS - talk to other players who have the same addon
 // @author       ISHAISAMET
 // @match        https://www.geo-fs.com/*
+// @match       https://www.geo-fs.com/geofs.php?v=3.9/*
 // @match        https://geo-fs.com/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/ISHAISAMET/GEO-FS-RADIO/main/geofs-radio.user.js
