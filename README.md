@@ -14,7 +14,7 @@ Install the [tampermonkey](https://chromewebstore.google.com/detail/tampermonkey
  - 3 Confirm:
 Tampermonkey will automatically detect the file and open an installation window – click Install, and that's it, the extension is active!
 
-(Note: If you have never installed any extension, you will need to enable "Developer mode" and "Allow user scripts" in the [extension management settings.](chrome://extensions))
+(Note: If you have never installed any extension, you will need to enable "Developer mode" and "Allow user scripts" in the [extension management settings.] (chrome://extensions))
 
 ## 📻 How to Use?
 After installing the extension, open GEO-FS (or refresh the page if it's already open) and you will see a small tab on the left side. Click on it, and you will now be presented with three channels (there are three in case you need to coordinate with two different parties simultaneously during a formation flight or other extreme cases 😕). You can turn each one off if necessary.
